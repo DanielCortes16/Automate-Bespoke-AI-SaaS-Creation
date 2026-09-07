@@ -1,0 +1,370 @@
+{
+  "catalog_version": "1.0.0",
+  "skills": [
+    {
+      "id": "skill_crear_factura",
+      "category": "accounting",
+      "description": "Emite factura fiscal con cálculo exacto de impuestos, retenciones y folio digital.",
+      "inputs": {
+        "tenant_id": "string",
+        "cliente_id": "string",
+        "items": "array",
+        "moneda": "string",
+        "metodo_pago": "string"
+      },
+      "outputs": {
+        "factura_id": "uuid",
+        "folio_fiscal": "string",
+        "subtotal": "number",
+        "impuestos": "number",
+        "total": "number",
+        "asiento_contable_id": "uuid"
+      },
+      "validation_points": [
+        "Invariante matemática Subtotal + Impuestos = Total",
+        "Validación de NIT/RFC de cliente",
+        "Generación síncrona de asiento contable de contrapartida"
+      ],
+      "saga_compensation": "skill_anular_factura_nota_credito"
+    },
+    {
+      "id": "skill_conciliar_transaccion",
+      "category": "accounting",
+      "description": "Cruza movimientos bancarios o de pasarela contra el libro mayor.",
+      "inputs": {
+        "tenant_id": "string",
+        "transaccion_externa_id": "string",
+        "asiento_contable_id": "string",
+        "monto": "number"
+      },
+      "outputs": {
+        "conciliado": "boolean",
+        "diferencia": "number",
+        "estado": "string"
+      },
+      "validation_points": [
+        "Tolerancia máxima configurada en la spec (< 0.01)"
+      ],
+      "saga_compensation": "skill_revertir_conciliacion"
+    },
+    {
+      "id": "skill_auditar_asiento_contable",
+      "category": "auditing",
+      "description": "Verifica que el asiento cumpla con el principio inmutable de partida doble.",
+      "inputs": {
+        "tenant_id": "string",
+        "asiento_id": "string"
+      },
+      "outputs": {
+        "valido": "boolean",
+        "suma_debe": "number",
+        "suma_haber": "number",
+        "discrepancia": "number"
+      },
+      "validation_points": [
+        "abs(suma_debe - suma_haber) == 0 exacto"
+      ],
+      "saga_compensation": "skill_bloquear_periodo_contable"
+    },
+    {
+      "id": "skill_emitir_pago_proveedor",
+      "category": "accounting",
+      "description": "Dispersa un pago a través de pasarela o transferencia bancaria conectada vía MCP.",
+      "inputs": {
+        "tenant_id": "string",
+        "proveedor_id": "string",
+        "monto": "number",
+        "cuenta_origen": "string"
+      },
+      "outputs": {
+        "comprobante_bancario_id": "string",
+        "estado_pago": "string"
+      },
+      "validation_points": [
+        "Saldo disponible suficiente",
+        "Verificación de límite diario de dispersión"
+      ],
+      "saga_compensation": "skill_solicitar_devolucion_transferencia"
+    },
+    {
+      "id": "skill_calcular_inventario",
+      "category": "inventory",
+      "description": "Calcula el stock valorizado mediante costo promedio ponderado o PEPS.",
+      "inputs": {
+        "tenant_id": "string",
+        "sku": "string",
+        "almacen_id": "string"
+      },
+      "outputs": {
+        "stock_fisico": "number",
+        "stock_disponible": "number",
+        "costo_unitario_ponderado": "number",
+        "valor_total": "number"
+      },
+      "validation_points": [
+        "Stock no negativo a menos que permita venta en corto"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_ajustar_stock",
+      "category": "inventory",
+      "description": "Incrementa o disminuye el inventario con registro de motivo e idempotencia.",
+      "inputs": {
+        "tenant_id": "string",
+        "sku": "string",
+        "cantidad_ajuste": "number",
+        "motivo": "string",
+        "idempotency_key": "string"
+      },
+      "outputs": {
+        "movimiento_id": "uuid",
+        "nuevo_stock": "number"
+      },
+      "validation_points": [
+        "Verificación previa de Idempotency-Key en Redis",
+        "Existencia confirmada del SKU"
+      ],
+      "saga_compensation": "skill_ajustar_stock_inverso"
+    },
+    {
+      "id": "skill_evaluar_punto_reorden",
+      "category": "inventory",
+      "description": "Calcula si el stock disponible cruzó el umbral de reposición.",
+      "inputs": {
+        "tenant_id": "string",
+        "sku": "string"
+      },
+      "outputs": {
+        "requiere_reorden": "boolean",
+        "cantidad_sugerida": "number",
+        "lead_time_dias": "number"
+      },
+      "validation_points": [
+        "Parámetros de rotación histórica disponibles"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_generar_orden_compra",
+      "category": "operations",
+      "description": "Crea una orden formal de abastecimiento dirigida a un proveedor.",
+      "inputs": {
+        "tenant_id": "string",
+        "proveedor_id": "string",
+        "items": "array",
+        "monto_total": "number"
+      },
+      "outputs": {
+        "orden_compra_id": "uuid",
+        "numero_consecutivo": "string",
+        "estado": "string"
+      },
+      "validation_points": [
+        "Proveedor habilitado en spec",
+        "Verificación de umbral HITL si supera el límite"
+      ],
+      "saga_compensation": "skill_cancelar_orden_compra"
+    },
+    {
+      "id": "skill_alertar_mantenimiento_preventivo",
+      "category": "maintenance",
+      "description": "Emite alerta operativa al cruzar umbrales de uso, horas o ciclos de una máquina.",
+      "inputs": {
+        "tenant_id": "string",
+        "activo_id": "string",
+        "horas_acumuladas": "number",
+        "umbral_mantenimiento": "number"
+      },
+      "outputs": {
+        "alerta_id": "uuid",
+        "severidad": "string",
+        "accion_recomendada": "string"
+      },
+      "validation_points": [
+        "Descarte de alertas repetidas en menos de 60 minutos"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_registrar_orden_trabajo_mantenimiento",
+      "category": "maintenance",
+      "description": "Crea orden de trabajo técnico y aparta piezas de repuesto en el inventario.",
+      "inputs": {
+        "tenant_id": "string",
+        "activo_id": "string",
+        "descripcion_falla": "string",
+        "repuestos_requeridos": "array"
+      },
+      "outputs": {
+        "orden_trabajo_id": "uuid",
+        "tecnico_asignado": "string",
+        "repuestos_bloqueados": "boolean"
+      },
+      "validation_points": [
+        "Disponibilidad de repuestos en almacén",
+        "Disponibilidad de técnico en cuadrícula"
+      ],
+      "saga_compensation": "skill_liberar_repuestos_orden_trabajo"
+    },
+    {
+      "id": "skill_diagnosticar_anomalia_telemetria",
+      "category": "maintenance",
+      "description": "Procesa series temporales de sensores IoT conectadas vía MCP y detecta anomalías z-score.",
+      "inputs": {
+        "tenant_id": "string",
+        "activo_id": "string",
+        "tipo_sensor": "string",
+        "lecturas_recientes": "array"
+      },
+      "outputs": {
+        "anomalia_detectada": "boolean",
+        "z_score_maximo": "number",
+        "diagnostico_estimado": "string"
+      },
+      "validation_points": [
+        "Muestras válidas con timestamps secuenciales no desfasados"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_crear_reserva",
+      "category": "hospitality",
+      "description": "Registra una reserva para comensal o cliente en un rango temporal con bloqueo de concurrencia.",
+      "inputs": {
+        "tenant_id": "string",
+        "cliente_nombre": "string",
+        "cliente_telefono": "string",
+        "fecha_inicio": "datetime",
+        "duracion_minutos": "integer",
+        "num_personas": "integer"
+      },
+      "outputs": {
+        "reserva_id": "uuid",
+        "mesa_asignada_id": "uuid",
+        "codigo_confirmacion": "string",
+        "estado": "string"
+      },
+      "validation_points": [
+        "Fecha posterior al tiempo actual",
+        "Bloqueo atómico de mesa sin solapamiento"
+      ],
+      "saga_compensation": "skill_cancelar_reserva"
+    },
+    {
+      "id": "skill_validar_disponibilidad",
+      "category": "hospitality",
+      "description": "Verifica aforo y disponibilidad de espacios o recursos para una ventana horaria.",
+      "inputs": {
+        "tenant_id": "string",
+        "fecha_inicio": "datetime",
+        "duracion_minutos": "integer",
+        "capacidad_necesaria": "integer",
+        "zona": "string"
+      },
+      "outputs": {
+        "disponible": "boolean",
+        "recursos_candidatos": "array",
+        "aforo_proyectado_porcentaje": "number"
+      },
+      "validation_points": [
+        "Consulta de exclusión mutua en Postgres con bloqueo optimista"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_asignar_recurso",
+      "category": "operations",
+      "description": "Asigna un recurso físico (mesa, quirófano, muelle de carga, bahía) a una tarea.",
+      "inputs": {
+        "tenant_id": "string",
+        "recurso_id": "uuid",
+        "tarea_o_reserva_id": "uuid"
+      },
+      "outputs": {
+        "asignacion_exitosa": "boolean",
+        "estado_recurso": "string"
+      },
+      "validation_points": [
+        "El recurso debe estar en estado LIBRE"
+      ],
+      "saga_compensation": "skill_liberar_recurso"
+    },
+    {
+      "id": "skill_registrar_solicitud_servicio",
+      "category": "service",
+      "description": "Ingesta y clasifica peticiones o tickets de usuarios con deduplicación.",
+      "inputs": {
+        "tenant_id": "string",
+        "canal_origen": "string",
+        "emisor_id": "string",
+        "contenido": "string"
+      },
+      "outputs": {
+        "ticket_id": "uuid",
+        "clasificacion_categoria": "string",
+        "prioridad_estimada": "string"
+      },
+      "validation_points": [
+        "Filtro antispam: no más de 3 solicitudes en 1 minuto por el mismo emisor"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_enrutar_solicitud_sla",
+      "category": "service",
+      "description": "Calcula el SLA contractual y enruta la solicitud al agente o cola pertinente.",
+      "inputs": {
+        "tenant_id": "string",
+        "ticket_id": "uuid",
+        "categoria": "string",
+        "prioridad": "string"
+      },
+      "outputs": {
+        "cola_destino": "string",
+        "tiempo_maximo_respuesta_minutos": "integer",
+        "fecha_limite_resolucion": "datetime"
+      },
+      "validation_points": [
+        "Reglas de calendario laboral del tenant aplicadas"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_verificar_compliance_operativo",
+      "category": "compliance",
+      "description": "Ejecuta paquete de políticas OPA (Open Policy Agent) para certificar validez legal.",
+      "inputs": {
+        "tenant_id": "string",
+        "contexto_operativo": "object"
+      },
+      "outputs": {
+        "aprobado": "boolean",
+        "violaciones": "array"
+      },
+      "validation_points": [
+        "Evaluación en memoria < 5ms"
+      ],
+      "saga_compensation": null
+    },
+    {
+      "id": "skill_bloquear_transaccion_sospechosa",
+      "category": "security",
+      "description": "Activa el circuit breaker y congela cuentas o transacciones ante anomalía de alto riesgo.",
+      "inputs": {
+        "tenant_id": "string",
+        "entidad_afectada": "string",
+        "score_riesgo": "number",
+        "motivo": "string"
+      },
+      "outputs": {
+        "bloqueo_id": "uuid",
+        "estado_cuarentena": "string"
+      },
+      "validation_points": [
+        "Score de riesgo >= 0.85"
+      ],
+      "saga_compensation": "skill_desbloquear_con_aprobacion_dual"
+    }
+  ]
+}
