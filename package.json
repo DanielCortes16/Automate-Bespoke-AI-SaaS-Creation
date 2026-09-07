@@ -1,0 +1,36 @@
+{
+  "name": "automate-bespoke-ai-saas-creation",
+  "version": "0.1.0",
+  "description": "Framework y motor para creación automatizada de plataformas SaaS multi-tenant dirigidas por especificación (Spec-Driven Multi-Agent SaaS Engine)",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "lint": "eslint . --ext .ts",
+    "test": "node --test"
+  },
+  "keywords": [
+    "saas",
+    "spec-driven",
+    "multi-agent",
+    "nats-jetstream",
+    "mcp",
+    "harness-engineering",
+    "typescript"
+  ],
+  "author": "DanielCortes16",
+  "license": "MIT",
+  "dependencies": {
+    "nats": "^2.28.2",
+    "zod": "^3.23.8",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
