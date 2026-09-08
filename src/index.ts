@@ -10,4 +10,6 @@ export * from './core/skills/skill-runtime.js';
 export * from './core/events/nats-stream.js';
 export * from './core/agents/prompt-engine.js';
 export * from './core/agents/loop-controller.js';
+export * from './core/spec/spec-validator.js';
+export * from './core/spec/spec-loader.js';
 export * from './skills/index.js';
