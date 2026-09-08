@@ -1,0 +1,158 @@
+# ==============================================================================
+# SAAS SPECIFICATION: RESTAURANTE DE ALTA ROTACIÓN & CAVA
+# ==============================================================================
+spec_version: "1.0.0"
+
+tenant:
+  id: "tenant_restaurante_gourmet_01"
+  name: "Bistró & Cava San Martín"
+  domain_vertical: "hospitality_restaurant"
+  jurisdiction: "CO"
+  timezone: "America/Bogota"
+  locale: "es-CO"
+  currency: "COP"
+  compliance_profile:
+    standard: ["PCI-DSS-Level-4", "DIAN-Facturacion-Electronica", "HACCP-Sanidad"]
+    retention_period_days: 1825
+    require_dual_control_above: 500000
+
+branding:
+  brand_name: "San Martín Bistró & Cava"
+  logo_url: "https://assets.bespokesaas.io/tenants/sm_bistro/logo.svg"
+  favicon_url: "https://assets.bespokesaas.io/tenants/sm_bistro/favicon.ico"
+  theme:
+    mode: "light"
+    tokens:
+      colors:
+        primary: "#8B1E24"
+        primary_contrast: "#FFFFFF"
+        secondary: "#D4AF37"
+        accent: "#2D5A27"
+        background: "#FDFBF7"
+        surface: "#FFFFFF"
+        surface_border: "#EADCC9"
+        text_primary: "#1A1715"
+        text_secondary: "#5C554F"
+        danger: "#C83232"
+        success: "#2E7D32"
+        warning: "#ED6C02"
+      typography:
+        font_family_headings: "'Playfair Display', Georgia, serif"
+        font_family_body: "'Inter', -apple-system, sans-serif"
+        base_size_px: 15
+        scale_ratio: 1.25
+      layout:
+        border_radius_card: "12px"
+        border_radius_button: "8px"
+        density: "comfortable"
+        sidebar_position: "left"
+        default_view_mode: "floor_plan"
+
+data_models:
+  - name: "mesas"
+    label: "Mesas del Restaurante"
+    storage_type: "relational"
+    indexes: ["numero_mesa", "zona", "estado"]
+    schema:
+      id: { type: "uuid", primary_key: true, default: "gen_random_uuid()" }
+      numero_mesa: { type: "string", required: true, unique_per_tenant: true }
+      zona: { type: "enum", options: ["terraza", "salon_principal", "cava_vip"], required: true }
+      capacidad: { type: "integer", min: 1, max: 20, required: true }
+      estado: { type: "enum", options: ["libre", "reservada", "ocupada", "mantenimiento"], default: "libre" }
+      posicion_x: { type: "integer", default: 0 }
+      posicion_y: { type: "integer", default: 0 }
+
+  - name: "reservas"
+    label: "Reservas de Comensales"
+    storage_type: "relational"
+    indexes: ["fecha_reserva", "cliente_telefono", "estado"]
+    schema:
+      id: { type: "uuid", primary_key: true, default: "gen_random_uuid()" }
+      cliente_nombre: { type: "string", required: true }
+      cliente_telefono: { type: "string", required: true }
+      fecha_reserva: { type: "datetime", required: true }
+      num_personas: { type: "integer", min: 1, required: true }
+      mesa_asignada_id: { type: "uuid", references: "mesas.id", nullable: true }
+      estado: { type: "enum", options: ["solicitada", "confirmada", "sentada", "cancelada", "no_show"], default: "solicitada" }
+      deposito_garantia: { type: "currency", default: 0.0 }
+
+  - name: "activos_cocina"
+    label: "Equipos y Maquinaria de Cocina"
+    storage_type: "relational"
+    schema:
+      id: { type: "uuid", primary_key: true, default: "gen_random_uuid()" }
+      nombre: { type: "string", required: true }
+      tipo: { type: "enum", options: ["horno_convector", "camara_frigorifica", "estufa_industrial", "lavavajillas"] }
+      sensor_iot_id: { type: "string", nullable: true }
+      horas_operacion_acumuladas: { type: "number", default: 0 }
+      ultimo_mantenimiento: { type: "datetime", nullable: true }
+
+agents:
+  - id: "agent_supervisor_bistro"
+    type: "supervisor"
+    role: "Orquestador de Operaciones del Restaurante"
+    model: "claude-3-7-sonnet"
+    max_turns_per_loop: 5
+    temperature: 0.1
+    allowed_delegations: ["agent_reservas_mesas", "agent_contable_caja", "agent_mantenimiento_cocina"]
+
+  - id: "agent_reservas_mesas"
+    type: "operations"
+    role: "Gestor de Reservas, Turnos y Aforo"
+    model: "claude-3-5-haiku"
+    temperature: 0.0
+    allowed_skills:
+      - "skill_validar_disponibilidad"
+      - "skill_crear_reserva"
+      - "skill_asignar_recurso"
+      - "skill_emitir_notificacion_multicanal"
+
+  - id: "agent_contable_caja"
+    type: "accounting"
+    role: "Auditor y Gestor de Facturación y Cierre de Comandas"
+    model: "claude-3-7-sonnet"
+    temperature: 0.0
+    allowed_skills:
+      - "skill_crear_factura"
+      - "skill_conciliar_transaccion"
+      - "skill_auditar_asiento_contable"
+
+  - id: "agent_mantenimiento_cocina"
+    type: "maintenance"
+    role: "Monitoreo Preventivo de Hornos y Cámaras de Frío"
+    model: "claude-3-5-haiku"
+    temperature: 0.0
+    allowed_skills:
+      - "skill_diagnosticar_anomalia_telemetria"
+      - "skill_alertar_mantenimiento_preventivo"
+      - "skill_registrar_orden_trabajo_mantenimiento"
+
+mcp_servers:
+  - id: "mcp_telemetria_iot_cocina"
+    description: "Sensores Modbus/MQTT conectados a cámaras frigoríficas"
+    transport: "sse"
+    endpoint: "https://iot.bistrosanmartin.internal/mcp"
+    auth_secret_ref: "vault://tenants/sm_bistro/iot_token"
+    permissions: ["read:temperatures", "read:compressor_rpm"]
+
+  - id: "mcp_dian_facturacion"
+    description: "Pasarela fiscal autorizada para facturación electrónica en Colombia"
+    transport: "stdio"
+    command: "/usr/local/bin/mcp-fiscal-gateway"
+    args: ["--country=CO", "--environment=production"]
+    auth_secret_ref: "vault://tenants/sm_bistro/fiscal_cert"
+    permissions: ["sign:invoice", "validate:cufe"]
+
+harness_policies:
+  strict_schema_validation: true
+  max_parallel_tool_calls: 3
+  budget_caps:
+    max_tokens_per_request: 8000
+    max_cost_usd_per_day: 15.00
+  security_guardrails:
+    block_prompts_containing: ["ignore previous instructions", "drop table", "dump database"]
+    mask_pii_fields: ["cliente_telefono", "tarjeta_credito"]
+  hitl_rules:
+    - action: "skill_crear_factura"
+      condition: "input.total_pagar > 500000"
+      reason: "Monto elevado requiere confirmación de supervisor de caja"

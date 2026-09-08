@@ -1,0 +1,131 @@
+# ==============================================================================
+# SAAS SPECIFICATION: FERRETERÍA INDUSTRIAL & SUMINISTROS
+# ==============================================================================
+spec_version: "1.0.0"
+
+tenant:
+  id: "tenant_ferreteria_industrial_02"
+  name: "Distribuidora & Suministros Metálicos S.A."
+  domain_vertical: "retail_hardware"
+  jurisdiction: "MX"
+  timezone: "America/Mexico_City"
+  locale: "es-MX"
+  currency: "MXN"
+  compliance_profile:
+    standard: ["SAT-CFDI-4.0", "ISO-9001-Calidad"]
+    retention_period_days: 2555
+    require_dual_control_above: 150000
+
+branding:
+  brand_name: "Metálicos S.A."
+  logo_url: "https://assets.bespokesaas.io/tenants/metalicos/logo.svg"
+  theme:
+    mode: "light"
+    tokens:
+      colors:
+        primary: "#1E3A8A"        # Azul acerado industrial
+        primary_contrast: "#FFFFFF"
+        secondary: "#EA580C"      # Naranja seguridad
+        accent: "#475569"         # Gris grafito
+        background: "#F8FAFC"
+        surface: "#FFFFFF"
+        surface_border: "#CBD5E1"
+        text_primary: "#0F172A"
+        text_secondary: "#475569"
+        danger: "#DC2626"
+        success: "#16A34A"
+        warning: "#D97706"
+      typography:
+        font_family_headings: "'Chakra Petch', sans-serif"
+        font_family_body: "'Inter', sans-serif"
+        base_size_px: 14
+        scale_ratio: 1.2
+      layout:
+        border_radius_card: "4px"  # Estilo industrial angular
+        border_radius_button: "4px"
+        density: "compact"
+        sidebar_position: "left"
+        default_view_mode: "data_table"
+
+data_models:
+  - name: "articulos_inventario"
+    label: "Catálogo de Artículos y Piezas"
+    storage_type: "relational"
+    indexes: ["sku", "codigo_barras", "ubicacion_pasillo"]
+    schema:
+      id: { type: "uuid", primary_key: true, default: "gen_random_uuid()" }
+      sku: { type: "string", required: true, unique_per_tenant: true }
+      codigo_barras: { type: "string", required: true }
+      descripcion: { type: "string", required: true }
+      categoria: { type: "enum", options: ["tornilleria", "herramienta_electrica", "tuberias", "abrasivos", "seguridad_industrial"] }
+      stock_actual: { type: "decimal", precision: 2, required: true }
+      stock_minimo: { type: "decimal", precision: 2, required: true }
+      stock_maximo: { type: "decimal", precision: 2, required: true }
+      costo_unitario: { type: "currency", required: true }
+      precio_mayoreo: { type: "currency", required: true }
+      precio_menudeo: { type: "currency", required: true }
+      ubicacion_pasillo: { type: "string" }
+
+  - name: "ordenes_compra_proveedor"
+    label: "Órdenes de Abastecimiento"
+    storage_type: "relational"
+    schema:
+      id: { type: "uuid", primary_key: true, default: "gen_random_uuid()" }
+      proveedor_id: { type: "string", required: true }
+      fecha_emision: { type: "datetime", required: true }
+      monto_total: { type: "currency", required: true }
+      estado: { type: "enum", options: ["borrador", "aprobada_automatica", "pendiente_aprobacion_hitl", "enviada_proveedor", "recibida"] }
+
+agents:
+  - id: "agent_supervisor_ferreteria"
+    type: "supervisor"
+    role: "Orquestador de Cadena de Suministro y Finanzas"
+    model: "claude-3-7-sonnet"
+    max_turns_per_loop: 5
+    temperature: 0.0
+
+  - id: "agent_abastecimiento"
+    type: "operations"
+    role: "Controlador de Stock y Órdenes de Reposición"
+    model: "claude-3-5-haiku"
+    temperature: 0.0
+    allowed_skills:
+      - "skill_calcular_inventario"
+      - "skill_ajustar_stock"
+      - "skill_evaluar_punto_reorden"
+      - "skill_generar_orden_compra"
+
+  - id: "agent_contabilidad_sat"
+    type: "accounting"
+    role: "Auditor de Facturación CFDI y Conciliación"
+    model: "claude-3-7-sonnet"
+    temperature: 0.0
+    allowed_skills:
+      - "skill_crear_factura"
+      - "skill_conciliar_transaccion"
+      - "skill_auditar_asiento_contable"
+
+mcp_servers:
+  - id: "mcp_balanza_industrial"
+    description: "Protocolo Serial/TCP para balanzas de tornillería por peso"
+    transport: "stdio"
+    command: "/opt/bin/mcp-scale-reader"
+    permissions: ["read:weight"]
+
+  - id: "mcp_erp_sap_b1"
+    description: "Conexión a SAP Business One para sincronización contable"
+    transport: "sse"
+    endpoint: "https://sap.metalicos.internal/mcp"
+    auth_secret_ref: "vault://tenants/metalicos/sap_api_key"
+    permissions: ["sync:journal_entries", "read:vendors"]
+
+harness_policies:
+  strict_schema_validation: true
+  max_parallel_tool_calls: 5
+  budget_caps:
+    max_tokens_per_request: 10000
+    max_cost_usd_per_day: 25.00
+  hitl_rules:
+    - action: "skill_generar_orden_compra"
+      condition: "input.monto_total > 150000"
+      reason: "Orden de compra de alto valor requiere firma de Gerente de Compras"
